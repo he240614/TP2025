@@ -15,7 +15,7 @@ Project/
 ├── scripts/
 │   ├── SMR.R
 │   ├── TSMR.R
-│   └── 3.MDD_snRNA_analysis.R
+│   └── MDD_snRNA_analysis.R
 │
 ├── data/
 │   ├── raw/   ###original files
