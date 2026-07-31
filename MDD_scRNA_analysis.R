@@ -1,16 +1,41 @@
+## Script:
+## 3.MDD_snRNA_analysis.R
+## Purpose:
+## MDD snRNA-seq analysis
+
 rm(list = ls())
 library(Seurat)
 library(Matrix)
-setwd("/data1/xty/cxy/SYX/MDDgse213/MDD_data/04.单细胞分析/rawdata")
+
+## Project directories
+project_dir <- "."      # change based on your own path
+
+data_dir <- file.path(project_dir, "01.rawdata")
+QC_dir <- file.path(data_dir, "02.QC")
+cellanno_dir <- file.path(data_dir, "03.CellAnno")
+DEanalysis_dir <- file.path(data_dir, "04.DEanalysis")
+edgeR_dir <- file.path(DEanalysis_dir, "edgeR")
+MASTRE_dir <- file.path(DEanalysis_dir, "MASTRE")
+sgGSEA_dir <- file.path(project_dir, "05.singlegeneGSEA")
+COQ8A_dir <- file.path(project_dir, "06.COQ8AEx")
+DAanalysis_dir <- file.path(project_dir, "07.DAanalysis")
+
+dir_list <- c(data_dir, QC_dir, cellanno_dir, DEanalysis_dir,
+              edgeR_dir, MASTRE_dir, sgGSEA_dir, COQ8A_dir,
+              DAanalysis_dir)
+invisible(
+  lapply(dir_list, dir.create,
+         recursive = TRUE,
+         showWarnings = FALSE))
 #######Data reading########
 genes_file <- "GSE213982_combined_counts_matrix_genes_rows.csv.gz"
-genes <- read.csv(gzfile(genes_file), header = TRUE, stringsAsFactors = FALSE)
+genes <- read.csv(gzfile(file.path(data_dir, genes_file)), header = TRUE, stringsAsFactors = FALSE)
 gene_names <- genes[, 1]  
 cells_file <- "GSE213982_combined_counts_matrix_cells_columns.csv.gz"
-cells <- read.csv(gzfile(cells_file), header = TRUE, stringsAsFactors = FALSE)
+cells <- read.csv(gzfile(file.path(data_dir, cells_file)), header = TRUE, stringsAsFactors = FALSE)
 cell_barcodes <- cells[, 1]  
 matrix_file <- "GSE213982_combined_counts_matrix.mtx.gz"
-count_matrix <- readMM(file = gzfile(matrix_file))
+count_matrix <- readMM(file = gzfile(file.path(data_dir, matrix_file)))
 stopifnot(length(gene_names) == nrow(count_matrix),
           length(cell_barcodes) == ncol(count_matrix))
 rownames(count_matrix) <- gene_names
@@ -22,7 +47,7 @@ gse213.sc <- CreateSeuratObject(
   min.cells = 3,
   min.features =200)
 print(gse213.sc)
-saveRDS(gse213.sc,"../01数据读取/gse213.sc.rds")
+saveRDS(gse213.sc,file.path(data_dir, "gse213.sc.rds"))
 
 ##########QC#######
 library(dplyr)
@@ -34,7 +59,7 @@ library(clustree)
 library(decontX)
 library(patchwork)
 library(harmony)
-gse213.sc <- readRDS("../01数据读取/gse213.sc.rds")
+gse213.sc <- readRDS(file.path(data_dir, "gse213.sc.rds"))
 rownames(gse213.sc@assays$RNA@layers$counts) = Features(gse213.sc)
 colnames(gse213.sc@assays$RNA@layers$counts) = Cells(gse213.sc)
 table(gse213.sc$orig.ident)
@@ -43,7 +68,7 @@ head(cell_names)
 samples <- sapply(strsplit(cell_names, split = "\\."), function(x) x[1])
 gse213.sc[["sample"]] <- samples
 unique(gse213.sc@meta.data[, "sample"])
-group <- read.csv("../01数据读取/group.csv",header = T)
+group <- read.csv(file.path(data_dir, "group.csv"),header = T)
 samples_in_seurat <- gse213.sc$sample
 groups_mapped <- group$group[match(samples_in_seurat, group$sample)]
 gse213.sc[["group"]] <- groups_mapped
@@ -57,22 +82,22 @@ gse213.sc <- subset(
 table(gse213.sc$sample)
 gse213.sc[["percent.mt"]] = PercentageFeatureSet(gse213.sc, pattern = "^MT-")
 p1 <- VlnPlot(object = gse213.sc, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3,group.by = "orig.ident")
-ggsave("../02数据质控/01_QCbefore.pdf", width = 15, height = 6, plot = p1)
-ggsave("../02数据质控/01_QCbefore.tiff", width = 15, height = 6, dpi = 300, plot = p1)
+ggsave(file.path(QC_dir, "01_QCbefore.pdf"), width = 15, height = 6, plot = p1)
+ggsave(file.path(QC_dir, "01_QCbefore.tiff"), width = 15, height = 6, dpi = 300, plot = p1)
 
 plot1 = FeatureScatter(gse213.sc, feature1 = "nCount_RNA", feature2 = "percent.mt")
 plot2 = FeatureScatter(gse213.sc, feature1 = "nCount_RNA", feature2 = "nFeature_RNA")
 p2 = plot1 + plot2
 p2
-ggsave("../02数据质控/02_FeatureScatter.pdf", width = 12, height = 6, plot = p2)
-ggsave("../02数据质控/02_FeatureScatter.tiff", width = 12, height = 6, dpi = 300, plot = p2)
+ggsave(file.path(QC_dir, "02_FeatureScatter.pdf"), width = 12, height = 6, plot = p2)
+ggsave(file.path(QC_dir, "02_FeatureScatter.tiff"), width = 12, height = 6, dpi = 300, plot = p2)
 
 gse213.sc = subset(gse213.sc, subset = nFeature_RNA > 250 & nFeature_RNA < 10000 & nCount_RNA < 100000 & percent.mt < 10)
 table(gse213.sc$orig.ident)
 p3 = VlnPlot(gse213.sc, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3, pt.size = 0)
 p3
-ggsave("../02数据质控/03_QCafter.pdf", width = 15, height = 6, plot = p3)
-ggsave("../02数据质控/03_QCafter.tiff", width = 15, height = 6, dpi = 300, plot = p3)
+ggsave(file.path(QC_dir, "03_QCafter.pdf"), width = 15, height = 6, plot = p3)
+ggsave(file.path(QC_dir, "03_QCafter.tiff"), width = 15, height = 6, dpi = 300, plot = p3)
 
 decontX_results = decontX::decontX(gse213.sc@assays$RNA@layers$counts)
 gse213.sc$Contamination = decontX_results$contamination
@@ -83,9 +108,9 @@ gse213.sc = gse213.sc[,row.names(rt)]
 options(future.globals.maxSize= 8388608000)
 gse213.sc <- SCTransform(
   gse213.sc,
-  assay = "RNA",           # 输入原始计数所在的 assay
-  vars.to.regress = c("percent.mt", "nCount_RNA", "nFeature_RNA"),  # 可选协变量
-  variable.features.n = 3000,  # 保留约 3000 个高变基因
+  assay = "RNA",
+  vars.to.regress = c("percent.mt", "nCount_RNA", "nFeature_RNA"), 
+  variable.features.n = 3000,  
   verbose = TRUE
 )
 
@@ -95,23 +120,23 @@ plot1 + RotatedAxis()
 gse213.sc <- RunPCA(gse213.sc, assay = "SCT", features = VariableFeatures(gse213.sc))
 p4 <- DimPlot(object = gse213.sc, reduction = "pca", pt.size = 0.1, group.by = "sample",raster=FALSE)
 p4
-ggsave("../02数据质控/04_PCA.pdf", width = 8, height = 6, plot = p4)
-ggsave("../02数据质控/04_PCA.tiff", width = 8, height = 6, dpi = 300, plot = p4)
+ggsave(file.path(QC_dir, "04_PCA.pdf"), width = 8, height = 6, plot = p4)
+ggsave(file.path(QC_dir, "04_PCA.tiff"), width = 8, height = 6, dpi = 300, plot = p4)
 gse213.sc = RunHarmony(gse213.sc, group.by.vars = "sample", plot_convergence = TRUE)
 p5 = DimPlot(object = gse213.sc, reduction = "harmony", pt.size = 0.1, group.by = "sample",raster=FALSE)
 p5
-ggsave("../02数据质控/05_Harmony.pdf", width = 8, height = 6, plot = p5)
-ggsave("../02数据质控/05_Harmony.tiff", width = 8, height = 6, dpi = 300, plot = p5)
+ggsave(file.path(QC_dir, "05_Harmony.pdf"), width = 8, height = 6, plot = p5)
+ggsave(file.path(QC_dir, "05_Harmony.tiff"), width = 8, height = 6, dpi = 300, plot = p5)
 p6 = ElbowPlot(gse213.sc, ndims = 50, reduction = "pca")+theme_bw()
 p6
-ggsave("../02数据质控/06_Elbowplot.pdf", width = 8, height = 6, plot = p6)
-ggsave("../02数据质控/06_Elbowplot.tiff", width = 8, height = 6, dpi = 300, plot = p6)
+ggsave(file.path(QC_dir, "06_Elbowplot.pdf"), width = 8, height = 6, plot = p6)
+ggsave(file.path(QC_dir, "06_Elbowplot.tiff"), width = 8, height = 6, dpi = 300, plot = p6)
 gse213.sc <- FindNeighbors(gse213.sc, assay = "SCT", reduction = "harmony",dims = 1:30)
 gse213.sc = FindClusters(gse213.sc, resolution = seq(from = 0.1, to = 1.0, by = 0.1))
 p7 = clustree(gse213.sc)
 p7
-ggsave("../02数据质控/07_clustree.pdf", width = 12, height = 10, plot = p7)
-ggsave("../02数据质控/07_clustree.tiff", width = 12, height = 10, dpi = 300, plot = p7)
+ggsave(file.path(QC_dir, "07_clustree.pdf"), width = 12, height = 10, plot = p7)
+ggsave(file.path(QC_dir, "07_clustree.tiff"), width = 12, height = 10, dpi = 300, plot = p7)
 Idents(gse213.sc) = "SCT_snn_res.0.6"
 plan <- c("#ea7070", "#fdc4b6", "#e59572", "#2694ab", "#96ceb4", "#ffeead","#ffad60",
           "#7F95D1","#d9534f",  "#57D1C9", "#ED5485",  "#FFE869", "#de4307", 
@@ -125,23 +150,23 @@ gse213.sc = RunUMAP(gse213.sc, reduction = "harmony", seed.use = 786452, dims = 
 gse213.sc = RunTSNE(gse213.sc, reduction = "harmony", seed.use = 786452, dims = 1:20)
 p8 = DimPlot(gse213.sc, reduction = "umap", group.by = "SCT_snn_res.0.6", cols = plan, label = T,repel = T,raster=FALSE)
 p8
-ggsave("../02数据质控/08_UMAP786452.pdf", width = 8, height = 6, plot = p8)
-ggsave("../02数据质控/08_UMAP786452.tiff", width = 8, height = 6, dpi = 300, plot = p8)
-save(gse213.sc, file = "../seurat_object_snn_0.6_1142.rdata")
+ggsave(file.path(QC_dir, "08_UMAP786452.pdf"), width = 8, height = 6, plot = p8)
+ggsave(file.path(QC_dir, "08_UMAP786452.tiff"), width = 8, height = 6, dpi = 300, plot = p8)
+save(gse213.sc, file = file.path(data_dir, "seurat_object_snn_0.6_1142.rdata"))
 
-##########细胞注释#########
+##########Cell annotation#########
 library(Seurat)
 library(ggplot2)
 library(dplyr)
 library(SingleR)
 library(celldex)
-load("../seurat_object_snn_0.6_1142.rdata")
+load(file.path(data_dir, "seurat_object_snn_0.6_1142.rdata"))
 allmarkers = FindAllMarkers(gse213.sc, only.pos = TRUE, min.pct = 0.6, logfc.threshold = 0.5)
-write.csv(allmarkers, "../03细胞注释/data/allmarkers.csv")
+write.csv(allmarkers, file.path(cellanno_dir, "allmarkers.csv"))
 Top10.coarse = allmarkers %>% 
   group_by(cluster) %>% 
   slice_max(n = 10, order_by = avg_log2FC)
-write.csv(Top10.coarse, "../03细胞注释/data/Top10.markers.csv")
+write.csv(Top10.coarse, file.path(cellanno_dir, "Top10.markers.csv"))
 ####未设置随机种子
 markers <- c(
   "NRGN","TUBA1B","SLC17A7",  #Excitatory Neurons(Ex) 
@@ -197,11 +222,11 @@ color <- c(
   "OPCs" = "#B3DE69")
 p10 = DimPlot(gse213.sc, group.by = "cell.types", reduction = "umap", label = T, pt.size = 0.1, cols = color,raster=FALSE)
 p10
-ggsave("../03细胞注释/09_CellType786452.pdf", width = 10, height = 8, plot = p10)
+ggsave(file.path(cellanno_dir, "09_CellType786452.pdf"), width = 10, height = 8, plot = p10)
 p11 = DimPlot(gse213.sc, group.by = "cell.types", reduction = "umap", split.by = "group",
               ncol=2, label = F, pt.size = 0.1, cols = color,raster=FALSE)
 p11
-ggsave("../03细胞注释/10_CellType786452_group.pdf", width = 12, height = 5, plot = p11)
+ggsave(file.path(cellanno_dir, "10_CellType786452_group.pdf"), width = 12, height = 5, plot = p11)
 
 ##
 Idents(gse213.sc) <- gse213.sc$cell.types
@@ -247,8 +272,8 @@ p9 <- DotPlot(
   labs(title = "Marker Gene Expression by Cell Type")
 
 print(p9)
-ggsave("../03细胞注释/10_CellType-marker.pdf", width = 12, height = 6, plot = p9)
-ggsave("../03细胞注释/10_CellType-marker.tiff", width = 12, height = 6, plot = p9, dpi = 300)
+ggsave(file.path(cellanno_dir, "10_CellType-marker.pdf"), width = 12, height = 6, plot = p9)
+ggsave(file.path(cellanno_dir, "10_CellType-marker.tiff"), width = 12, height = 6, plot = p9, dpi = 300)
 
 ## 
 library(dplyr)
@@ -275,7 +300,7 @@ Cell_type_stat_table <- meta %>%
     Condition
   )
 print(Cell_type_stat_table)
-write.csv(Cell_type_stat_table, file = "../03细胞注释/细胞数量统计.csv", row.names = FALSE)  ###03细胞注释/data
+write.csv(Cell_type_stat_table, file = file.path(cellanno_dir, "Cellnumber_count.csv"), row.names = FALSE)  
 meta <- gse213.sc@meta.data %>%
   as.data.frame() %>%
   select(sample, group, Condition)
@@ -294,7 +319,7 @@ group_stat_table <- meta %>%
     Condition
   )
 print(group_stat_table)
-write.csv(group_stat_table, file = "../03细胞注释/sample.csv", row.names = FALSE)   ####03细胞注释/data
+write.csv(group_stat_table, file = file.path(cellanno_dir, "sample.csv"), row.names = FALSE)   
 
 #
 library(ggthemes)
@@ -356,9 +381,9 @@ p11 <- ggplot(proportion_df,
 
 
 plot(p11)
-ggsave("../03细胞注释/11_celltype_proportion_histogram.pdf", width = 6, height = 8, plot = p11)
-ggsave("../03细胞注释/11_celltype_proportion_histogram.tiff", width = 6, height = 8, dpi = 300, plot = p11)
-save(gse213.sc, file = "../scRNA_brsrp.rdata")
+ggsave(file.path(cellanno_dir, "11_celltype_proportion_histogram.pdf"), width = 6, height = 8, plot = p11)
+ggsave(file.path(cellanno_dir, "11_celltype_proportion_histogram.tiff"), width = 6, height = 8, dpi = 300, plot = p11)
+save(gse213.sc, file = file.path(data_dir, "scRNA_brsrp.rdata"))
 
 #########differential expression analysis######
 set.seed(786452)
@@ -398,13 +423,13 @@ for (i in 1:7) {
 }
 dataall <- do.call(rbind, dataall)
 rownames(dataall) <- NULL
-write.csv(dataall,'../03细胞注释/MAST/allcell_DEGs.csv')
+write.csv(dataall,file.path(DEanalysis_dir, "allcell_DEGs.csv"))
 xx <- c('Astros','Endo','Ex','Inhib',
         'Micro','Oligos','OPCs')
 for (i in 1:7) {
   sc.marker1 = sc.marker[[i]]
   sc.marker1$cell = xx[i]
-  write.csv(sc.marker1,file = paste0('../03细胞注释/MAST/',xx[i],'_de.csv'))
+  write.csv(sc.marker1,file = paste0(file.path(DEanalysis_dir),xx[i],'_de.csv'))
 }
 
 #####single cell vocanol plot
@@ -505,7 +530,7 @@ multiVolcanoPlot = function(dat, color.arr=NULL, onlyAnnotateUp=T,
     )
   vol.plot
 }
-alldegs <- read.csv("../03细胞注释/MAST/allcell_DEGs.csv")
+alldegs <- read.csv(file.path(DEanalysis_dir, "allcell_DEGs.csv"))
 colors <- c("#8DD3C7","#FFED6F","#FB8072","#80B1D3",
             "#BEBADA","#FDB462","#B3DE69")
 alldegs$label <- ifelse(alldegs$p_val_adj<0.05,
@@ -516,12 +541,246 @@ table(alldegs$label)
 alldegs$cluster = factor(alldegs$cell, 
                          levels = c("Astros","Endo","Ex",
                                     "Inhib","Micro","Oligos","OPCs"))
-
+alldegs <- alldegs %>%
+  dplyr::rename(gene = gene_name)
 newv <- multiVolcanoPlot(alldegs[,2:10],  
                          colors, onlyAnnotateUp = FALSE, top_marker = 3, 
                          log2Foldchang=0.2, adjp=0.05)
 newv
-ggsave(newv, file="../03细胞注释/MAST/AllDEGs_valcano0.2_v1.pdf",width =14, height = 6) 
+ggsave(newv, file=file.path(DEanalysis_dir, "AllDEGs_valcano0.2_v1.pdf"),width =14, height = 6) 
+
+####edgeR pseudobulk
+rm(list = ls())
+plan <- c("#ea7070", "#fdc4b6", "#e59572", "#2694ab", "#96ceb4", "#ffeead","#ffad60",
+          "#7F95D1","#d9534f",  "#57D1C9", "#ED5485",  "#FFE869", "#de4307", 
+          "#f29c2b", "#f6d04d", "#8bc24c", "#4695d6", "#fed95c", "#fa6e57", "#f69e53", 
+          "#248888", "#999999", "#E7475E", "#F0D879", "#29A2C6", "#FFCB18", "#73B66B", 
+          "#FF6D31", "#f1ac9d", "#f06966", "#dee2d1", "#6abe83", "#FCF4D9", "#FFB85F", 
+          "#FF7A5A", "#8ED2C9", "#a5dff9", "#ef5285", "#60c5ba", "#feee7d", "#e8a0b8", 
+          "#ffc300", "#bccf3d", "#02c9c9", "#fbf579", "#005995", "#fa625f", "#600473", 
+          "#f17d80", "#737495")
+suppressMessages(library(Seurat))
+suppressMessages(library(Matrix))
+suppressMessages(library(dplyr))
+suppressMessages(library(stringr))
+suppressMessages(library(progress))
+suppressMessages(library(edgeR))
+suppressMessages(library(BiocParallel))
+library(patchwork)
+####
+load(file.path(data_dir, "scRNA_brsrp.rdata"))
+Idents(gse213.sc) <- gse213.sc$orig.ident
+gse213.sc$group <- as.factor(gse213.sc$group)
+gse213.sc$Condition = ifelse(gse213.sc$group=='Case','MDD','CTL')
+unique(gse213.sc$cell.types) ##查看所有细胞类型
+Micro <- subset(gse213.sc,subset = cell.types == "Micro") ##根据细胞类型修改
+###If Ex
+###Ex <- subset(gse213.sc,subset = cell.types == "Ex")
+######
+run_pseudobulk_edger <- function(
+    seu,
+    sample_col = "sample",
+    group_col = "Condition",
+    min_cells = 10,
+    output_file = NULL,
+    robust = TRUE
+){
+  
+  ## donor filter
+  sample_vec <- seu@meta.data[[sample_col]]
+  cellnum <- table(sample_vec)
+  keep.sample <- names(
+    cellnum[cellnum >= min_cells])
+  cells.keep <- rownames(seu@meta.data
+  )[sample_vec %in% keep.sample]
+  seu <- subset(seu,cells = cells.keep)
+  cat("Retained donors:",
+      length(unique(seu[[sample_col]][,1])),"\n")
+  
+  ## pseudobulk
+  counts <- GetAssayData(seu,assay = "RNA",layer = "counts")
+  pb_counts <- rowsum(t(as.matrix(counts)),
+                      group = seu[[sample_col]][,1])
+  pb_counts <- t(pb_counts)
+  
+  ## sample metadata
+  sample_info <- seu@meta.data %>%
+    dplyr::select(all_of(sample_col),all_of(group_col)) %>%
+    distinct()
+  colnames(sample_info) <- c("sample", "Condition")
+  
+  ## sex info
+  sample_info$sex <- ifelse(substr(sample_info$sample,1,1)=="F",
+                            "Female","Male")
+  sample_info$sex <- factor(sample_info$sex)
+  
+  ## 对齐
+  sample_info <- sample_info[
+    match(colnames(pb_counts),sample_info$sample),
+  ]
+  rownames(sample_info) <- sample_info$sample
+  stopifnot(
+    all(
+      sample_info$sample ==
+        colnames(pb_counts)
+    )
+  )
+  
+  ## edgeR
+  dge <- DGEList(
+    counts = pb_counts)
+  keep <- filterByExpr(dge,
+                       group = sample_info$Condition)
+  dge <- dge[keep,,keep.lib.sizes = FALSE]
+  dge <- calcNormFactors(dge)
+  sample_info$Condition <- factor(sample_info$Condition,
+                                  levels = c("CTL","MDD"))
+  design <- model.matrix(~ sex + Condition,
+                         data = sample_info) ###添加性别作为协变量
+  dge <- estimateDisp(dge,design)
+  fit <- glmQLFit(dge,design,robust = robust)
+  res <- glmQLFTest(fit,coef = "ConditionMDD")
+  deg <- topTags(res,n = Inf)$table
+  
+  ## 保存
+  if(!is.null(output_file)){
+    write.csv(
+      deg,
+      output_file
+    )
+  }
+  
+  return(
+    list(
+      DEG = deg,
+      fit = fit,
+      dge = dge,
+      design = design,
+      sample_info = sample_info
+    )
+  )
+}
+micro_res <- run_pseudobulk_edger(seu = Micro,
+                                  output_file =file.path(edgeR_dir, "Micro_edgeR.csv"))
+##change cell Rdata name
+#ex_res <- run_pseudobulk_edger(seu = Ex,
+#                                  output_file =file.path(edgeR_dir, "Ex_edgeR.csv"))
+
+####MAST-RE
+rm(list = ls())
+plan <- c("#ea7070", "#fdc4b6", "#e59572", "#2694ab", "#96ceb4", "#ffeead","#ffad60",
+          "#7F95D1","#d9534f",  "#57D1C9", "#ED5485",  "#FFE869", "#de4307", 
+          "#f29c2b", "#f6d04d", "#8bc24c", "#4695d6", "#fed95c", "#fa6e57", "#f69e53", 
+          "#248888", "#999999", "#E7475E", "#F0D879", "#29A2C6", "#FFCB18", "#73B66B", 
+          "#FF6D31", "#f1ac9d", "#f06966", "#dee2d1", "#6abe83", "#FCF4D9", "#FFB85F", 
+          "#FF7A5A", "#8ED2C9", "#a5dff9", "#ef5285", "#60c5ba", "#feee7d", "#e8a0b8", 
+          "#ffc300", "#bccf3d", "#02c9c9", "#fbf579", "#005995", "#fa625f", "#600473", 
+          "#f17d80", "#737495")
+suppressMessages(library(Seurat))
+suppressMessages(library(Matrix))
+suppressMessages(library(dplyr))
+suppressMessages(library(stringr))
+suppressMessages(library(progress))
+suppressMessages(library(edgeR))
+suppressMessages(library(BiocParallel))
+suppressMessages(library(MAST))
+library(patchwork)
+####封装函数版
+load(file.path(data_dir, "scRNA_brsrp.rdata"))
+Idents(gse213.sc) <- gse213.sc$orig.ident
+gse213.sc$group <- as.factor(gse213.sc$group)
+gse213.sc$Condition = ifelse(gse213.sc$group=='Case','MDD','CTL')
+unique(gse213.sc$cell.types) ##查看所有细胞类型
+Micro <- subset(gse213.sc,subset = cell.types == "Micro") ##change based on celltypes
+####RNA
+# define and fit the model
+run_MAST_RE_RNA <- function(
+    seu,
+    ref_group = "CTL",
+    min_cells_per_sample = 10,
+    min_pct = 0.1,
+    out_file = NULL
+){
+  
+  ## donor filter
+  sample_n <- table(seu$sample)
+  keep_samples <- names(
+    sample_n[sample_n >= min_cells_per_sample])
+  seu <- subset(seu, subset = sample %in% keep_samples)
+  cat("Retained samples:", length(unique(seu$sample)), "\n")
+  cat("Remaining cells:", ncol(seu), "\n\n")
+  
+  ## Add sex information
+  if(!"sex" %in% colnames(seu@meta.data)){
+    seu$sex <- ifelse(substr(seu$sample, 1, 1) == "F",
+                      "Female", "Male")}
+  seu$sex <- factor(seu$sex,
+                    levels = c("Female","Male"))
+  
+  ##使用RNA assay
+  DefaultAssay(seu) <- "RNA"
+  if(ncol(GetAssayData(seu, layer = "data")) == 0){
+    seu <- NormalizeData(seu,
+                         normalization.method = "LogNormalize",
+                         scale.factor = 10000, verbose = FALSE
+    )
+  }
+  
+  sce <- as.SingleCellExperiment(seu, assay = "RNA")
+  sca <- SceToSingleCellAssay(sce)
+  cat("Before gene filtering:\n")
+  print(dim(sca))
+  
+  sca <- sca[freq(sca) > min_pct, ]
+  cat("After gene filtering:\n")
+  print(dim(sca))
+  
+  ##Cellular detection rate
+  cdr2 <- colSums(assay(sca) > 0)
+  colData(sca)$cngeneson <- scale(cdr2)
+  
+  colData(sca)$Condition <- factor(
+    colData(sca)$Condition)
+  
+  ## CTL as reference
+  colData(sca)$Condition <- relevel(
+    colData(sca)$Condition,
+    ref = ref_group)
+  colData(sca)$sex <- factor(
+    colData(sca)$sex)
+  colData(sca)$sample <- factor(
+    colData(sca)$sample)
+  
+  ##MAST mixed model
+  cat("\nFitting MAST model...\n")
+  zlmCond <- zlm(formula = ~ Condition + sex + cngeneson + (1 | sample),
+                 sca = sca, method = "glmer", ebayes = FALSE,
+                 strictConvergence = FALSE, fitArgsD = list(nAGQ = 0)) 
+  
+  ##MDD vs CTL
+  summaryCond <- summary(zlmCond, doLRT = "ConditionMDD")
+  lrt.dt <- summaryCond$datatable
+  result <- merge(lrt.dt[contrast=='ConditionMDD' & component=='H',.(primerid, `Pr(>Chisq)`)], # p-values
+                  lrt.dt[contrast=='ConditionMDD' & component=='logFC', .(primerid, coef)],
+                  by='primerid') # logFC coefficients
+  ##lnFC -> log2FC
+  result[, log2FC := coef / log(2)]
+  ##FDR
+  result[, FDR :=
+           p.adjust(`Pr(>Chisq)`, method = "BH")]
+  result <- as.data.frame(result)
+  result <- result[
+    order(result$FDR),]
+  rownames(result) <- NULL
+  ## save results
+  write.csv(result, file = out_file, row.names = FALSE)
+  cat( "\nResults saved to:", out_file, "\n")
+  
+  return(result)
+}
+
+mastRE_res <- run_MAST_RE_RNA(seu = Micro, #change based on celltypes
+                              out_file = file.path(MASTRE_dir, "Micro_MAST_RE_RNA.csv"))
 
 #####single-gene GSEA
 library(Seurat)
@@ -538,8 +797,7 @@ library(msigdbr)
 library(limma)
 library(psych)
 library(DOSE)
-setwd("/data1/xty/cxy/SYX/MDDgse213/MDD_data/04.单细胞分析/rawdata")
-load("../scRNA_brsrp.rdata")
+load(file.path(data_dir, "scRNA_brsrp.rdata"))
 set.seed(786452)
 DimPlot(gse213.sc, group.by = "cell.types", reduction = "umap", label = T, pt.size = 0.1,raster=FALSE)
 mycolor = pal_npg( "nrc", alpha = 0.8)(10) 
@@ -555,11 +813,7 @@ expr = data.frame(expr)
 rt = expr
 #
 set.seed(3456)
-output_dir = "../brsrpGSEA"
-if (!dir.exists(output_dir)) {
-  dir.create(output_dir)
-  message("已创建文件夹：", output_dir)
-}
+output_dir = sgGSEA_dir
 # Ex
 gene = c("COQ8A")
 options(timeout = 99999) 
@@ -661,8 +915,7 @@ suppressMessages(library(progress))
 suppressMessages(library(edgeR))
 suppressMessages(library(BiocParallel))
 library(patchwork)
-setwd("/data1/xty/cxy/SYX/MDDgse213/MDD_data/04.单细胞分析/rawdata")
-load("../scRNA_brsrp.rdata")
+load(file.path(data_dir, "scRNA_brsrp.rdata"))
 ex <- subset(gse213.sc, subset = cell.types == "Ex")
 DefaultAssay(ex) <- "SCT"
 coq <- FetchData(ex, vars = "COQ8A", layer = "data")[,1]
@@ -692,7 +945,7 @@ p_umap_dis <- DimPlot(
   pt.size = 0.1,
   raster = FALSE)
 p_umap_dis
-ggsave("../brsrp_COQ8A_Ex/CellType_COQ8A_Ex_groupsplit.pdf", width = 14, height = 8, p_umap_dis)
+ggsave(file.path(COQ8A_dir, "CellType_COQ8A_Ex_groupsplit.pdf"), width = 14, height = 8, p_umap_dis)
 ######
 df_prop <- ex@meta.data %>%
   group_by(Condition) %>%
@@ -711,7 +964,7 @@ p2<-ggplot(df_prop, aes(x = Condition, y = prop, fill = Condition)) +
   labs(
     y = "Proportion of COQ8A+ Ex",
     x = NULL)
-ggsave("../brsrp_COQ8A_Ex/Cellratio_COQ8A_Ex.pdf", width = 6, height = 5, p2)
+ggsave(file.path(COQ8A_dir, "Cellratio_COQ8A_Ex.pdf"), width = 6, height = 5, p2)
 #########group set
 ex$group_2x2 <- paste(ex$Condition, ex$COQ8A_group, sep = "_")
 table(ex$group_2x2)
@@ -741,8 +994,8 @@ deg_dis_ths <- FindMarkers(ex,
                            group.by = "group_2x2",
                            logfc.threshold = 0.26,
                            min.pct = 0.05)
-write.csv(deg_ctrl_ths, file = "../brsrp_COQ8A_Ex/COQ8A_DEGs/COQ8A_CTL_DEGs_0.26.csv")
-write.csv(deg_dis_ths, file = "../brsrp_COQ8A_Ex/COQ8A_DEGs/COQ8A_MDD_DEGs_0.26.csv")
+write.csv(deg_ctrl_ths, file = file.path(COQ8A_dir, "COQ8A_CTL_DEGs_0.26.csv"))
+write.csv(deg_dis_ths, file = file.path(COQ8A_dir, "COQ8A_MDD_DEGs_0.26.csv"))
 ###
 deg_ctrl <- FindMarkers(ex,
                         ident.1 = "CTL_COQ8A_pos",
@@ -756,8 +1009,8 @@ deg_dis <- FindMarkers(ex,
                        group.by = "group_2x2",
                        logfc.threshold = 0,
                        min.pct = 0.05)
-write.csv(deg_ctrl, file = "../brsrp_COQ8A_Ex/COQ8A_DEGs/COQ8A_CTL_DEGs.csv")
-write.csv(deg_dis, file = "../brsrp_COQ8A_Ex/COQ8A_DEGs/COQ8A_MDD_DEGs.csv")
+write.csv(deg_ctrl, file = file.path(COQ8A_dir, "COQ8A_CTL_DEGs.csv"))
+write.csv(deg_dis, file = file.path(COQ8A_dir, "COQ8A_MDD_DEGs.csv"))
 
 ###
 #######COQ8A+ Ex vocanol plots
@@ -767,8 +1020,8 @@ library(readr)
 library(ggvenn)
 library(ggrastr)
 ########
-#res_8AMDD <- read.csv("../brsrp_COQ8A_Ex/COQ8A_DEGs/COQ8A_MDD_DEGs.csv")
-res_8AMDD <- read.csv("../brsrp_COQ8A_Ex/COQ8A_DEGs/COQ8A_CTL_DEGs.csv") ##res_8ACTL
+#res_8AMDD <- read.csv(file.path(COQ8A_dir, "COQ8A_MDD_DEGs.csv"))
+res_8AMDD <- read.csv(file.path(COQ8A_dir, "COQ8A_CTL_DEGs.csv")) ##res_8ACTL
 #######
 res_8AMDD$type <- case_when(res_8AMDD$avg_log2FC > 0.26 & res_8AMDD$p_val_adj < 0.05 ~ 'Up',
                             res_8AMDD$avg_log2FC < -0.26 & res_8AMDD$p_val_adj < 0.05 ~ 'Down',
@@ -801,14 +1054,14 @@ p1 <- ggplot(res_8AMDD1, aes(x = avg_log2FC, y = -log10(p_val_adj), colour=type)
 
 p2 <- p1 + coord_flip()
 p2
-ggsave("CTL_COQ8A_volcano_simple_withoutEX.pdf", p2, device = cairo_pdf, width = 7, height = 6)
+ggsave(file.path(COQ8A_dir, "CTL_COQ8A_volcano_simple_withoutEX.pdf"), p2, device = cairo_pdf, width = 7, height = 6)
 
 #####GO
 library(tools)
 library(dplyr)
 library(clusterProfiler)
 library(org.Hs.eg.db)
-folder_path <- "/data1/xty/cxy/SYX/MDDgse213/MDD_data/04.单细胞分析/brsrp_COQ8A_Ex/COQ8A_DEGs"
+folder_path <- COQ8A_dir
 file_suffix <- "_DEGs_0.26.csv"
 file_list <- list.files(
   path = folder_path,
@@ -817,7 +1070,7 @@ file_list <- list.files(
   ignore.case = FALSE                        
 )
 file_list
-fixed_prefix <- "/data1/xty/cxy/SYX/MDDgse213/MDD_data/04.单细胞分析/brsrp_COQ8A_Ex/COQ8A_DEGs/"
+fixed_prefix <- COQ8A_dir
 fixed_suffix <- "_DEGs_0.26.csv"
 options(timeout = 99999) 
 for (file in file_list) {
@@ -854,9 +1107,9 @@ suppressMessages(library(Seurat))
 suppressMessages(library(SingleR))
 suppressMessages(library(Matrix))
 suppressMessages(library(dplyr))
-output_dir <- "/data1/xty/cxy/SYX/MDDgse213/MDD_data/04.单细胞分析/brsrp_COQ8A_Ex/COQ8A_GSEA"
-deg_dis <- read.csv("../brsrp_COQ8A_Ex/COQ8A_DEGs/COQ8A_MDD_DEGs.csv")
-deg_ctrl <- read.csv("../brsrp_COQ8A_Ex/COQ8A_DEGs/COQ8A_CTL_DEGs.csv")
+output_dir <- COQ8A_dir
+deg_dis <- read.csv(file.path(COQ8A_dir, "COQ8A_MDD_DEGs.csv"))
+deg_ctrl <- read.csv(file.path(COQ8A_dir, "COQ8A_CTL_DEGs.csv"))
 set.seed(123456789)
 options(timeout = 99999) 
 ## SYMBOL + FC
@@ -865,7 +1118,7 @@ deg_ctrl_filt$gene <- row.names(deg_ctrl_filt)
 d <- deg_ctrl_filt %>%
   dplyr::select(SYMBOL = gene, FC = avg_log2FC) %>%
   dplyr::filter(!is.na(SYMBOL), FC != 0)
-entrez <- bitr(d$SYMBOL,fromType = "SYMBOL",toType   = "ENTREZID",
+entrez <- bitr(d$SYMBOL,fromType = "SYMBOL",toType = "ENTREZID",
                OrgDb = org.Hs.eg.db)
 final <- inner_join(d, entrez, by = "SYMBOL")
 final2 <- final %>%
@@ -893,7 +1146,7 @@ if (!is.null(gse_go) && nrow(gse_go@result) > 0) {
 library(dplyr)
 library(tidyr)
 library(ggplot2)
-go_result <- read.csv("../brsrp_COQ8A_Ex/COQ8A_DEGs/COQ8A_CTL_enrichGO_padj.csv", row.names = 1, stringsAsFactors = FALSE)
+go_result <- read.csv(file.path(COQ8A_dir, "COQ8A_CTL_enrichGO_padj.csv"), row.names = 1, stringsAsFactors = FALSE)
 #######
 top30_go <- go_result %>%
   filter(ONTOLOGY == "BP") %>%
@@ -939,10 +1192,10 @@ p5 <- ggplot() +
     legend.position = "right"
   )
 p5
-ggsave("CTL_COQ8AEx_GOtop30_bar_dotplot.pdf", p5, width = 12, height = 8)
+ggsave(file.path(COQ8A_dir, "CTL_COQ8AEx_GOtop30_bar_dotplot.pdf"), p5, width = 12, height = 8)
 
 ##GSEA
-gsea_df <- read.csv("../brsrp_COQ8A_Ex/COQ8A_GSEA/COQ8A_MDD_GOBP_GSEA.csv")
+gsea_df <- read.csv(file.path(COQ8A_dir, "COQ8A_MDD_GOBP_GSEA.csv"))
 library(dplyr)
 gsea_df <- gsea_df %>% 
   filter(p.adjust < 0.05) %>%
@@ -990,7 +1243,7 @@ p_final <- p +
   )
 
 p_final
-ggsave("MDD_COQ8AEx_GOBP_GSEA_lollipop.pdf", p_final, width = 10, height = 8)
+ggsave(file.path(COQ8A_dir, "MDD_COQ8AEx_GOBP_GSEA_lollipop.pdf"), p_final, width = 10, height = 8)
 
 ####supplemental analysis
 #####edgeR NB-GLM
@@ -1029,7 +1282,8 @@ res <- glmQLFTest(fit, coef = "ConditionMDD")
 da_res <- topTags(res, n = Inf)$table
 da_res$celltype <- rownames(da_res)
 head(da_res)
-write.csv(da_res, file = "../edgeR/DAresults_all.csv",row.names = T)
+write.csv(da_res, file = file.path(DAanalysis_dir, "DAresults_all.csv"),row.names = T)
 sig_da <- da_res %>%
   filter(FDR < 0.05)
-write.csv(sig_da, file = "../edgeR/DAresults_sig.csv",row.names = T)
+write.csv(sig_da, file = file.path(DAanalysis_dir, "DAresults_sig.csv"),row.names = T)
+
