@@ -9,7 +9,6 @@ The workflow integrates publicly available snRNA-seq datasets and performs donor
 ---
 
 ## Repository structure
-###根据自己的命名修改文件夹名称或脚本名称以及脚本内文件夹名称（完成后删除此行注释）
 ```
 Project/
 
@@ -19,8 +18,8 @@ Project/
 │   └── 3.MDD_snRNA_analysis.R
 │
 ├── data/
-│   ├── raw/   ###原始文件或输入文件的文件夹（完成后删除此注释）
-│   └── processed/  ###处理后的中间文件或最终数据 （完成后删除此注释）
+│   ├── raw/   ###original files
+│   └── processed/  ###processed files
 │
 ├── results/
 │   ├── SMR/
@@ -155,7 +154,7 @@ at the beginning of each script.
 
 Intermediate processed objects used in the manuscript are available at
 
-(Insert Zenodo DOI here)
+10.5281/zenodo.21722584
 
 ---
 
@@ -163,4 +162,4 @@ Intermediate processed objects used in the manuscript are available at
 
 If you use these scripts, please cite
 
-XXXXX et al.
+Cheng-Long Dong et al.
