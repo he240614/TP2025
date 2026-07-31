@@ -13,8 +13,8 @@ The workflow integrates publicly available snRNA-seq datasets and performs donor
 Project/
 
 ├── scripts/
-│   ├── 01.SMR.R
-│   ├── 02.TSMR_coloc.R
+│   ├── SMR.R
+│   ├── TSMR.R
 │   └── 3.MDD_snRNA_analysis.R
 │
 ├── data/
