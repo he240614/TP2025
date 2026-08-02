@@ -533,9 +533,12 @@ multiVolcanoPlot = function(dat, color.arr=NULL, onlyAnnotateUp=T,
 alldegs <- read.csv(file.path(DEanalysis_dir, "allcell_DEGs.csv"))
 colors <- c("#8DD3C7","#FFED6F","#FB8072","#80B1D3",
             "#BEBADA","#FDB462","#B3DE69")
-alldegs$label <- ifelse(alldegs$p_val_adj<0.05,
-                        ifelse(alldegs$avg_log2FC>=0.2, "Up", "Down"),
-                        "None")
+alldegs <- alldegs %>%
+  mutate(label = case_when(
+    p_val_adj < 0.05 & avg_log2FC >= 0.2  ~ "Up",
+    p_val_adj < 0.05 & avg_log2FC <= -0.2 ~ "Down",
+    TRUE ~ "None"
+  ))
 alldegs$label = factor(alldegs$label, levels = c("Up", "None", "Down"))
 table(alldegs$label)
 alldegs$cluster = factor(alldegs$cell, 
